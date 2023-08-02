@@ -11,7 +11,7 @@ keywords = [
 license = "Apache-2.0"
 
 [tool.poetry.dependencies]
-python = "<3.12,>=3.7.1"
+python = "<3.12,>=3.8.1"
 singer-sdk = { version="^0.30.0" }
 pymysql = "^1.1.0"
 fs-s3fs = { version = "^1.1.1", optional = true }
@@ -27,6 +27,11 @@ s3 = ["fs-s3fs"]
 ignore = [
     "ANN101",  # missing-type-self
     "ANN102",  # missing-type-cls
+    "TD002",  # Missing author in TOD
+    "TD003",  # Missing issue link on the line following this TODO
+    "FIX002",  # Line contains TODO, consider resolving the issue
+    "FBT001",  # Boolean positional arg in function definition
+    "FBT002",  # Boolean default value in function definition
 ]
 select = ["ALL"]
 src = ["target_mysql"]

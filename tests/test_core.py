@@ -1,33 +1,27 @@
 """Tests standard target features using the built-in SDK tests library."""
+# flake8: noqa
 
 from __future__ import annotations
 
-import typing as t
-
-import pytest
-from singer_sdk.testing import get_target_test_class
-
-from target_mysql.target import TargetMySQL
-
 import copy
 import io
-import uuid
+import typing as t
 from contextlib import redirect_stdout
 from pathlib import Path
 
 import jsonschema
 import pytest
 import sqlalchemy
-from singer_sdk.testing import sync_end_to_end
+from singer_sdk.testing import get_target_test_class, sync_end_to_end
 from sqlalchemy import create_engine
-from sqlalchemy.types import TIMESTAMP, VARCHAR
 
 from target_mysql.connector import MySQLConnector
+from target_mysql.target import TargetMySQL
 from tests.samples.aapl.aapl import Fundamentals
 from tests.samples.sample_tap_countries.countries_tap import SampleTapCountries
 
 SAMPLE_CONFIG: dict[str, t.Any] = {
-    "sqlalchemy_url": "mysql+pymysql://root:password@localhost:3306/melty"
+    "sqlalchemy_url": "mysql+pymysql://root:password@localhost:3306/melty",
 }
 
 
@@ -38,11 +32,11 @@ StandardTargetTests = get_target_test_class(
 )
 
 
-class TestTargetMySQL(StandardTargetTests):  # type: ignore[misc, valid-type]  # noqa: E501
+class TestTargetMySQL(StandardTargetTests):  # type: ignore[misc, valid-type]
     """Standard Target Tests."""
 
     @pytest.fixture(scope="class")
-    def resource(self):  # noqa: ANN201
+    def resource(self):
         """Generic external resource.
 
         This fixture is useful for setup and teardown of external resources,
@@ -52,8 +46,6 @@ class TestTargetMySQL(StandardTargetTests):  # type: ignore[misc, valid-type]  #
         https://github.com/meltano/sdk/tree/main/tests/samples
         """
         return "resource"
-
-
 
 
 @pytest.fixture(scope="session")
@@ -72,23 +64,23 @@ def mysql_config():
     }
 
 
-@pytest.fixture
+@pytest.fixture()
 def mysql_target(mysql_config) -> TargetMySQL:
     return TargetMySQL(config=mysql_config)
 
 
-@pytest.fixture
+@pytest.fixture()
 def engine(mysql_config) -> sqlalchemy.engine.Engine:
     return create_engine(
         f"{(mysql_config)['dialect+driver']}://"
         f"{(mysql_config)['user']}:{(mysql_config)['password']}@"
         f"{(mysql_config)['host']}:{(mysql_config)['port']}/"
-        f"{(mysql_config)['database']}"
+        f"{(mysql_config)['database']}",
     )
 
 
 def singer_file_to_target(file_name, target) -> None:
-    """Singer file to Target, emulates a tap run
+    """Singer file to Target, emulates a tap run.
 
     Equivalent to running cat file_path | target-name --config config.json.
     Note that this function loads all lines into memory, so it is
@@ -100,11 +92,10 @@ def singer_file_to_target(file_name, target) -> None:
     """
     file_path = Path(__file__).parent / Path("./data_files") / Path(file_name)
     buf = io.StringIO()
-    with redirect_stdout(buf):
-        with open(file_path) as f:
-            for line in f:
-                print(line.rstrip("\r\n"))  # File endings are here,
-                # and print adds another line ending so we need to remove one.
+    with redirect_stdout(buf), open(file_path) as f:
+        for line in f:
+            print(line.rstrip("\r\n"))  # File endings are here,
+            # and print adds another line ending so we need to remove one.
     buf.seek(0)
     target.listen(buf)
 
@@ -113,7 +104,7 @@ def singer_file_to_target(file_name, target) -> None:
 
 
 def test_sqlalchemy_url_config(mysql_config):
-    """Be sure that passing a sqlalchemy_url works
+    """Be sure that passing a sqlalchemy_url works.
 
     mysql_config is used because an SQLAlchemy URL will override all SSL
     settings and preclude connecting to a database using SSL.
@@ -125,7 +116,7 @@ def test_sqlalchemy_url_config(mysql_config):
     port = mysql_config["port"]
 
     config = {
-        "sqlalchemy_url": f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
+        "sqlalchemy_url": f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}",
     }
     tap = SampleTapCountries(config={}, state=None)
     target = TargetMySQL(config=config)
@@ -133,7 +124,7 @@ def test_sqlalchemy_url_config(mysql_config):
 
 
 def test_port_default_config():
-    """Test that the default config is passed into the engine when the config doesn't provide it"""
+    """Test that the default config is passed into the engine when the config doesn't provide it."""
     config = {
         "dialect+driver": "mysql+pymysql",
         "host": "localhost",
@@ -157,7 +148,7 @@ def test_port_default_config():
 
 
 def test_port_config():
-    """Test that the port config works"""
+    """Test that the port config works."""
     config = {
         "dialect+driver": "mysql+pymysql",
         "host": "localhost",
@@ -243,7 +234,7 @@ def test_optional_attributes(mysql_target):
 
 
 def test_schema_no_properties(mysql_target):
-    """Expect to fail with ValueError"""
+    """Expect to fail with ValueError."""
     file_name = "schema_no_properties.singer"
     singer_file_to_target(file_name, mysql_target)
 
@@ -270,7 +261,7 @@ def test_relational_data(mysql_target):
 
 
 def test_no_primary_keys(mysql_config, engine):
-    """We run both of these tests twice just to ensure that no records are removed and append only works properly"""
+    """We run both of these tests twice just to ensure that no records are removed and append only works properly."""
     table_name = "test_no_pk"
     mysql_target = TargetMySQL(config=mysql_config)
     full_table_name = mysql_target.config["default_target_schema"] + "." + table_name
@@ -308,21 +299,19 @@ def test_array_data(mysql_target):
 
 # TODO test that data is correct
 def test_encoded_string_data(mysql_target):
-    """
-    We removed NUL characters from the original encoded_strings.singer as postgres doesn't allow them.
+    """We removed NUL characters from the original encoded_strings.singer as postgres doesn't allow them.
     https://www.postgresql.org/docs/current/functions-string.html#:~:text=chr(0)%20is%20disallowed%20because%20text%20data%20types%20cannot%20store%20that%20character.
     chr(0) is disallowed because text data types cannot store that character.
 
     Note you will recieve a  ValueError: A string literal cannot contain NUL (0x00) characters. Which seems like a reasonable error.
     See issue https://github.com/MeltanoLabs/target-postgres/issues/60 for more details.
     """
-
     file_name = "encoded_strings.singer"
     singer_file_to_target(file_name, mysql_target)
 
 
 def test_tap_appl(mysql_target):
-    """Expect to fail with ValueError due to primary key https://github.com/MeltanoLabs/target-postgres/issues/54"""
+    """Expect to fail with ValueError due to primary key https://github.com/MeltanoLabs/target-postgres/issues/54."""
     file_name = "tap_aapl.singer"
     singer_file_to_target(file_name, mysql_target)
 
@@ -351,13 +340,13 @@ def test_large_int(mysql_target):
 
 
 def test_new_array_column(mysql_target):
-    """Create a new Array column with an existing table"""
+    """Create a new Array column with an existing table."""
     file_name = "new_array_column.singer"
     singer_file_to_target(file_name, mysql_target)
 
 
 def test_activate_version_hard_delete(mysql_config, engine):
-    """Activate Version Hard Delete Test"""
+    """Activate Version Hard Delete Test."""
     table_name = "test_activate_version_hard"
     file_name = f"{table_name}.singer"
     full_table_name = mysql_config["default_target_schema"] + "." + table_name
@@ -370,10 +359,10 @@ def test_activate_version_hard_delete(mysql_config, engine):
         assert result.rowcount == 7
         # Add a record like someone would if they weren't using the tap target combo
         result = connection.execute(
-            f"INSERT INTO {full_table_name}(code, `name`) VALUES('Manual1', 'Meltano')"
+            f"INSERT INTO {full_table_name}(code, `name`) VALUES('Manual1', 'Meltano')",
         )
         result = connection.execute(
-            f"INSERT INTO {full_table_name}(code, `name`) VALUES('Manual2', 'Meltano')"
+            f"INSERT INTO {full_table_name}(code, `name`) VALUES('Manual2', 'Meltano')",
         )
         result = connection.execute(f"SELECT * FROM {full_table_name}")
         assert result.rowcount == 9
@@ -387,7 +376,7 @@ def test_activate_version_hard_delete(mysql_config, engine):
 
 
 def test_activate_version_soft_delete(mysql_config, engine):
-    """Activate Version Soft Delete Test"""
+    """Activate Version Soft Delete Test."""
     table_name = "test_activate_version_soft"
     file_name = f"{table_name}.singer"
     full_table_name = mysql_config["default_target_schema"] + "." + table_name
@@ -403,10 +392,10 @@ def test_activate_version_soft_delete(mysql_config, engine):
         assert result.rowcount == 7
         # Add a record like someone would if they weren't using the tap target combo
         result = connection.execute(
-            f"INSERT INTO {full_table_name}(code, `name`) VALUES('Manual1', 'Meltano')"
+            f"INSERT INTO {full_table_name}(code, `name`) VALUES('Manual1', 'Meltano')",
         )
         result = connection.execute(
-            f"INSERT INTO {full_table_name}(code, `name`) VALUES('Manual2', 'Meltano')"
+            f"INSERT INTO {full_table_name}(code, `name`) VALUES('Manual2', 'Meltano')",
         )
         result = connection.execute(f"SELECT * FROM {full_table_name}")
         assert result.rowcount == 9
@@ -419,13 +408,13 @@ def test_activate_version_soft_delete(mysql_config, engine):
         assert result.rowcount == 9
 
         result = connection.execute(
-            f"SELECT * FROM {full_table_name} where _sdc_deleted_at is NOT NULL"
+            f"SELECT * FROM {full_table_name} where _sdc_deleted_at is NOT NULL",
         )
         assert result.rowcount == 2
 
 
 def test_activate_version_deletes_data_properly(mysql_config, engine):
-    """Activate Version should"""
+    """Activate Version should."""
     table_name = "test_activate_version_deletes_data_properly"
     file_name = f"{table_name}.singer"
     full_table_name = mysql_config["default_target_schema"] + "." + table_name
@@ -439,10 +428,10 @@ def test_activate_version_deletes_data_properly(mysql_config, engine):
     # Will populate us with 7 records
     with engine.connect() as connection:
         result = connection.execute(
-            f"INSERT INTO {full_table_name} (code, `name`) VALUES('Manual1', 'Meltano')"
+            f"INSERT INTO {full_table_name} (code, `name`) VALUES('Manual1', 'Meltano')",
         )
         result = connection.execute(
-            f"INSERT INTO {full_table_name} (code, `name`) VALUES('Manual2', 'Meltano')"
+            f"INSERT INTO {full_table_name} (code, `name`) VALUES('Manual2', 'Meltano')",
         )
         result = connection.execute(f"SELECT * FROM {full_table_name}")
         assert result.rowcount == 9
@@ -453,4 +442,3 @@ def test_activate_version_deletes_data_properly(mysql_config, engine):
     with engine.connect() as connection:
         result = connection.execute(f"SELECT * FROM {full_table_name}")
         assert result.rowcount == 0
-

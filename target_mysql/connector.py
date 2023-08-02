@@ -43,7 +43,7 @@ class MySQLConnector(SQLConnector):
             sqlalchemy_url=url.render_as_string(hide_password=False),
         )
 
-    def prepare_table(
+    def prepare_table(  # noqa: PLR0913
         self,
         full_table_name: str,
         schema: dict,
@@ -63,7 +63,7 @@ class MySQLConnector(SQLConnector):
         _, schema_name, table_name = self.parse_full_table_name(full_table_name)
         meta = sqlalchemy.MetaData(bind=self._engine, schema=schema_name)
         if not self.table_exists(full_table_name=full_table_name):
-            table = self.create_empty_table(
+            return self.create_empty_table(
                 table_name=table_name,
                 meta=meta,
                 schema=schema,
@@ -71,11 +71,16 @@ class MySQLConnector(SQLConnector):
                 partition_keys=partition_keys,
                 as_temp_table=as_temp_table,
             )
-            return table
         for property_name, property_def in schema["properties"].items():
             is_primary_key = property_name in primary_keys
             self.prepare_column(
-                full_table_name, property_name, self.to_sql_type(property_def, self.config["max_varchar_size"], is_primary_key)
+                full_table_name,
+                property_name,
+                self.to_sql_type(
+                    property_def,
+                    self.config["max_varchar_size"],
+                    is_primary_key,
+                ),
             )
         meta.reflect(only=[table_name])
 
@@ -94,25 +99,30 @@ class MySQLConnector(SQLConnector):
         """
         return self.create_sqlalchemy_engine().connect()
 
-    def drop_table(self, table: sqlalchemy.Table):
+    def drop_table(self, table: sqlalchemy.Table) -> None:
         """Drop table data."""
         table.drop(bind=self.connection)
 
-    def clone_table(
-        self, new_table_name, table, metadata, connection, temp_table
+    # TODO: type hinting for arguments.
+    def clone_table(  # noqa: PLR0913
+        self,
+        new_table_name,  # noqa: ANN001
+        table,  # noqa: ANN001
+        metadata,  # noqa: ANN001
+        connection,  # noqa: ANN001
+        temp_table,  # noqa: ANN001
     ) -> sqlalchemy.Table:
         """Clone a table."""
-        new_columns = []
-        for column in table.columns:
-            new_columns.append(
-                sqlalchemy.Column(
-                    column.name,
-                    column.type,
-                )
-            )
+        new_columns = [
+            sqlalchemy.Column(column.name, column.type) for column in table.columns
+        ]
+
         if temp_table is True:
             new_table = sqlalchemy.Table(
-                new_table_name, metadata, *new_columns, prefixes=["TEMPORARY"]
+                new_table_name,
+                metadata,
+                *new_columns,
+                prefixes=["TEMPORARY"],
             )
         else:
             new_table = sqlalchemy.Table(new_table_name, metadata, *new_columns)
@@ -120,7 +130,11 @@ class MySQLConnector(SQLConnector):
         return new_table
 
     @staticmethod
-    def to_sql_type(jsonschema_type: dict, max_varchar_size: int = 255, is_primary_key: bool = False) -> sqlalchemy.types.TypeEngine:
+    def to_sql_type(
+        jsonschema_type: dict,
+        max_varchar_size: int = 255,
+        is_primary_key: bool = False,
+    ) -> sqlalchemy.types.TypeEngine:
         """Return a JSON Schema representation of the provided type.
 
         By default will call `typing.to_sql_type()`.
@@ -132,6 +146,9 @@ class MySQLConnector(SQLConnector):
 
         Args:
             jsonschema_type: The JSON Schema representation of the source type.
+            max_varchar_size: An upper limit on the size of varchar fields.
+            is_primary_key: Whether the field represented by jsonschema_type is a
+                primary key.
 
         Returns:
             The SQLAlchemy type representation of the data type.
@@ -152,24 +169,25 @@ class MySQLConnector(SQLConnector):
                 msg = "Invalid format for jsonschema type: not str or list."
                 raise RuntimeError(msg)
         elif jsonschema_type.get("anyOf", False):
-            for entry in jsonschema_type["anyOf"]:
-                json_type_array.append(entry)
+            json_type_array = list(jsonschema_type["anyOf"])
         else:
             msg = "Neither type nor anyOf are present. Unable to determine type."
             raise RuntimeError(msg)
 
         sql_type_array = []
         for json_type in json_type_array:
-            picked_type = MySQLConnector.pick_individual_type(
-                jsonschema_type=json_type
-            )
+            picked_type = MySQLConnector.pick_individual_type(jsonschema_type=json_type)
             if picked_type is not None:
                 sql_type_array.append(picked_type)
 
-        return MySQLConnector.pick_best_sql_type(sql_type_array=sql_type_array, is_primary_key=is_primary_key, max_varchar_size=max_varchar_size)
+        return MySQLConnector.pick_best_sql_type(
+            sql_type_array=sql_type_array,
+            is_primary_key=is_primary_key,
+            max_varchar_size=max_varchar_size,
+        )
 
     @staticmethod
-    def pick_individual_type(jsonschema_type: dict):
+    def pick_individual_type(jsonschema_type: dict) -> sqlalchemy.types.TypeEngine:
         """Select the correct sql type assuming jsonschema_type has only a single type.
 
         Args:
@@ -187,11 +205,17 @@ class MySQLConnector(SQLConnector):
         return th.to_sql_type(jsonschema_type)
 
     @staticmethod
-    def pick_best_sql_type(sql_type_array: list, is_primary_key: bool, max_varchar_size: int):
+    def pick_best_sql_type(
+        sql_type_array: list,
+        is_primary_key: bool,
+        max_varchar_size: int,
+    ) -> sqlalchemy.types.TypeEngine:
         """Select the best SQL type from an array of instances of SQL type classes.
 
         Args:
             sql_type_array: The array of instances of SQL type classes.
+            is_primary_key: Whether the field in question is a primary key.
+            max_varchar_size: An upper limit on the size of varchar fields.
 
         Returns:
             An instance of the best SQL type class based on defined precedence order.
@@ -227,13 +251,13 @@ class MySQLConnector(SQLConnector):
             return VARCHAR(length=max_varchar_primary_key_size)
         return VARCHAR(length=max_varchar_size)
 
-    def create_empty_table(
+    def create_empty_table(  # noqa: PLR0913
         self,
         table_name: str,
         meta: sqlalchemy.MetaData,
         schema: dict,
         primary_keys: list[str] | None = None,
-        partition_keys: list[str] | None = None,
+        partition_keys: list[str] | None = None,  # noqa: ARG002
         as_temp_table: bool = False,
     ) -> sqlalchemy.Table:
         """Create an empty target table.
@@ -244,6 +268,8 @@ class MySQLConnector(SQLConnector):
             primary_keys: list of key properties.
             partition_keys: list of partition keys.
             as_temp_table: True to create a temp table.
+            meta: Metadata for the table.
+            table_name: The name of the empty table.
 
         Raises:
             NotImplementedError: if temp tables are unsupported and as_temp_table=True.
@@ -253,24 +279,32 @@ class MySQLConnector(SQLConnector):
         primary_keys = primary_keys or []
         try:
             properties: dict = schema["properties"]
-        except KeyError:
-            raise RuntimeError(
-                f"Schema for table_name: '{table_name}'"
-                f"does not define properties: {schema}"
+        except KeyError as e:
+            msg = (
+                f"Schema for table_name: '{table_name}'does not define properties: "
+                f"{schema}"
             )
+            raise RuntimeError(msg) from e
 
         for property_name, property_jsonschema in properties.items():
             is_primary_key = property_name in primary_keys
             columns.append(
                 sqlalchemy.Column(
                     property_name,
-                    self.to_sql_type(property_jsonschema, self.config["max_varchar_size"], is_primary_key),
+                    self.to_sql_type(
+                        property_jsonschema,
+                        self.config["max_varchar_size"],
+                        is_primary_key,
+                    ),
                     primary_key=is_primary_key,
-                )
+                ),
             )
         if as_temp_table:
             new_table = sqlalchemy.Table(
-                table_name, meta, *columns, prefixes=["TEMPORARY"]
+                table_name,
+                meta,
+                *columns,
+                prefixes=["TEMPORARY"],
             )
             new_table.create(bind=self.connection)
             return new_table
@@ -317,13 +351,12 @@ class MySQLConnector(SQLConnector):
         if config.get("sqlalchemy_url"):
             return cast(str, config["sqlalchemy_url"])
 
-        else:
-            sqlalchemy_url = URL.create(
-                drivername=config["dialect+driver"],
-                username=config["user"],
-                password=config["password"],
-                host=config["host"],
-                port=config["port"],
-                database=config["database"],
-            )
-            return cast(str, sqlalchemy_url)
+        sqlalchemy_url = URL.create(
+            drivername=config["dialect+driver"],
+            username=config["user"],
+            password=config["password"],
+            host=config["host"],
+            port=config["port"],
+            database=config["database"],
+        )
+        return cast(str, sqlalchemy_url)

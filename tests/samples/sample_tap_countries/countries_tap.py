@@ -5,6 +5,7 @@ This uses a free "Countries API" which does not require authentication.
 See the online explorer and query builder here:
   - https://countries.trevorblades.com/
 """
+# flake8: noqa
 
 from typing import List
 

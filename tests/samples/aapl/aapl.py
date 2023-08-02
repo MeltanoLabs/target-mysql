@@ -1,4 +1,5 @@
 """A simple tap with one big record and schema."""
+# flake8: noqa
 
 import json
 from pathlib import Path
