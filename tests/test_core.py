@@ -21,7 +21,7 @@ from tests.samples.aapl.aapl import Fundamentals
 from tests.samples.sample_tap_countries.countries_tap import SampleTapCountries
 
 SAMPLE_CONFIG: dict[str, t.Any] = {
-    "sqlalchemy_url": "mysql+pymysql://root:password@localhost:3306/melty",
+    "sqlalchemy_url": "mysql+pymysql://root:password@localhost:3307/melty",
 }
 
 
@@ -56,7 +56,7 @@ def mysql_config():
         "user": "root",
         "password": "password",
         "database": "melty",
-        "port": 3306,
+        "port": 3307,
         "add_record_metadata": True,
         "hard_delete": False,
         "default_target_schema": "melty",
@@ -143,7 +143,7 @@ def test_port_default_config():
     engine: sqlalchemy.engine.Engine = connector.create_sqlalchemy_engine()
     assert (
         str(engine.url)
-        == f"{dialect_driver}://{user}:{password}@{host}:3306/{database}"
+        == f"{dialect_driver}://{user}:{password}@{host}:3307/{database}"
     )
 
 
@@ -155,7 +155,7 @@ def test_port_config():
         "user": "root",
         "password": "pasword",
         "database": "melty",
-        "port": 3306,
+        "port": 3307,
     }
     dialect_driver = config["dialect+driver"]
     host = config["host"]
@@ -168,7 +168,7 @@ def test_port_config():
     engine: sqlalchemy.engine.Engine = connector.create_sqlalchemy_engine()
     assert (
         str(engine.url)
-        == f"{dialect_driver}://{user}:{password}@{host}:3306/{database}"
+        == f"{dialect_driver}://{user}:{password}@{host}:3307/{database}"
     )
 
 
