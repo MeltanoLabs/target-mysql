@@ -1,0 +1,42 @@
+version: 1
+send_anonymous_usage_stats: true
+default_environment: dev
+project_id: target-mysql
+plugins:
+  extractors:
+  - name: tap-smoke-test
+    namespace: tap_smoke_test
+    pip_url: git+https://github.com/meltano/tap-smoke-test.git
+    executable: tap-smoke-test
+    config:
+      streams:
+      - stream_name: animals
+        input_filename: https://gitlab.com/meltano/tap-smoke-test/-/raw/main/demo-data/animals-data.jsonl
+      - stream_name: page_views
+        input_filename: https://gitlab.com/meltano/tap-smoke-test/-/raw/main/demo-data/pageviews-data.jsonl
+      stream_maps:
+        animals:
+          __key_properties__: [id]
+        page_views:
+          __key_properties__: [vistor_id]
+  loaders:
+  - name: target-mysql
+    namespace: target_mysql
+    pip_url: -e .
+    settings:
+    - name: host
+    - name: port
+      kind: integer
+    - name: user
+    - name: password
+      kind: password
+    - name: database
+    - name: sqlalchemy_url
+      kind: password
+    - name: dialect+driver
+    - name: default_target_schema
+    - name: hard_delete
+    - name: add_record_metadata
+    - name: max_varchar_size
+environments:
+- name: dev
