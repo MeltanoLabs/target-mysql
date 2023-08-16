@@ -6,7 +6,7 @@ from typing import cast
 import sqlalchemy
 from singer_sdk import SQLConnector
 from singer_sdk import typing as th
-from sqlalchemy.dialects.mysql import BIGINT
+from sqlalchemy.dialects.mysql import BIGINT, JSON
 from sqlalchemy.engine import URL
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.types import (
@@ -200,6 +200,12 @@ class MySQLConnector(SQLConnector):
             return None
         if "integer" in jsonschema_type["type"]:
             return BIGINT()
+        if "decimal" in jsonschema_type["type"]:
+            return BIGINT()
+        if "object" in jsonschema_type["type"]:
+            return JSON()
+        if "array" in jsonschema_type["type"]:
+            return JSON()
         if jsonschema_type.get("format") == "date-time":
             return TIMESTAMP()
         return th.to_sql_type(jsonschema_type)
@@ -221,6 +227,7 @@ class MySQLConnector(SQLConnector):
             An instance of the best SQL type class based on defined precedence order.
         """
         precedence_order = [
+            JSON,
             VARCHAR,
             TIMESTAMP,
             DATETIME,
