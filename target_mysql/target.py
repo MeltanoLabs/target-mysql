@@ -106,7 +106,7 @@ class TargetMySQL(Target):
         th.Property(
             "dialect+driver",
             th.StringType,
-            default="mysql+pymysql",
+            default="mysql+mysqldb",
             description=(
                 "Dialect+driver see "
                 "https://docs.sqlalchemy.org/en/20/core/engines.html. "

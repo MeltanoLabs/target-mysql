@@ -22,7 +22,7 @@ pipx install git+https://github.com/MeltanoLabs/target-mysql.git@main
 | password             | False    | None    | Password used to authenticate. Note if sqlalchemy_url is set this will be ignored. |
 | database             | False    | None    | Database name. Note if sqlalchemy_url is set this will be ignored. |
 | sqlalchemy_url       | False    | None    | SQLAlchemy connection string. This will override using host, user, password, port, dialect, and all ssl settings. Note that you must escape password special characters properly. See https://docs.sqlalchemy.org/en/20/core/engines.html#escaping-special-characters-such-as-signs-in-passwords |
-| dialect+driver       | False    | mysql+pymysql | Dialect+driver see https://docs.sqlalchemy.org/en/20/core/engines.html. Generally just leave this alone. Note if sqlalchemy_url is set this will be ignored. |
+| dialect+driver       | False    | mysql+mysqldb | Dialect+driver see https://docs.sqlalchemy.org/en/20/core/engines.html. Generally just leave this alone. Note if sqlalchemy_url is set this will be ignored. |
 | default_target_schema| False    | melty   | MySQL schema to send data to, example: tap-clickup |
 | hard_delete          | False    |       0 | When activate version is sent from a tap this specefies if we should delete the records that don't match, or mark them with a date in the `_sdc_deleted_at` column. |
 | add_record_metadata  | False    |       1 | Note that this must be enabled for activate_version to work!This adds _sdc_extracted_at, _sdc_batched_at, and more to every table. See https://sdk.meltano.com/en/latest/implementation/record_metadata.html for more information. |

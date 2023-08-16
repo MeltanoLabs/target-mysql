@@ -21,7 +21,7 @@ from tests.samples.aapl.aapl import Fundamentals
 from tests.samples.sample_tap_countries.countries_tap import SampleTapCountries
 
 SAMPLE_CONFIG: dict[str, t.Any] = {
-    "sqlalchemy_url": "mysql+pymysql://root:password@localhost:3307/melty",
+    "sqlalchemy_url": "mysql+mysqldb://root:password@localhost:3306/melty",
 }
 
 
@@ -51,12 +51,12 @@ class TestTargetMySQL(StandardTargetTests):  # type: ignore[misc, valid-type]
 @pytest.fixture(scope="session")
 def mysql_config():
     return {
-        "dialect+driver": "mysql+pymysql",
+        "dialect+driver": "mysql+mysqldb",
         "host": "localhost",
         "user": "root",
         "password": "password",
         "database": "melty",
-        "port": 3307,
+        "port": 3306,
         "add_record_metadata": True,
         "hard_delete": False,
         "default_target_schema": "melty",
@@ -116,7 +116,7 @@ def test_sqlalchemy_url_config(mysql_config):
     port = mysql_config["port"]
 
     config = {
-        "sqlalchemy_url": f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}",
+        "sqlalchemy_url": f"mysql+mysqldb://{user}:{password}@{host}:{port}/{database}",
     }
     tap = SampleTapCountries(config={}, state=None)
     target = TargetMySQL(config=config)
@@ -126,7 +126,7 @@ def test_sqlalchemy_url_config(mysql_config):
 def test_port_default_config():
     """Test that the default config is passed into the engine when the config doesn't provide it."""
     config = {
-        "dialect+driver": "mysql+pymysql",
+        "dialect+driver": "mysql+mysqldb",
         "host": "localhost",
         "user": "root",
         "password": "password",
@@ -143,19 +143,19 @@ def test_port_default_config():
     engine: sqlalchemy.engine.Engine = connector.create_sqlalchemy_engine()
     assert (
         str(engine.url)
-        == f"{dialect_driver}://{user}:{password}@{host}:3307/{database}"
+        == f"{dialect_driver}://{user}:{password}@{host}:3306/{database}"
     )
 
 
 def test_port_config():
     """Test that the port config works."""
     config = {
-        "dialect+driver": "mysql+pymysql",
+        "dialect+driver": "mysql+mysqldb",
         "host": "localhost",
         "user": "root",
         "password": "pasword",
         "database": "melty",
-        "port": 3307,
+        "port": 3306,
     }
     dialect_driver = config["dialect+driver"]
     host = config["host"]
@@ -168,7 +168,7 @@ def test_port_config():
     engine: sqlalchemy.engine.Engine = connector.create_sqlalchemy_engine()
     assert (
         str(engine.url)
-        == f"{dialect_driver}://{user}:{password}@{host}:3307/{database}"
+        == f"{dialect_driver}://{user}:{password}@{host}:3306/{database}"
     )
 
 
