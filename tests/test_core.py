@@ -20,7 +20,8 @@ from tests.samples.aapl.aapl import Fundamentals
 from tests.samples.sample_tap_countries.countries_tap import SampleTapCountries
 
 SAMPLE_CONFIG: dict[str, t.Any] = {
-    "sqlalchemy_url": "mysql+mysqldb://root:password@localhost:3306/melty",
+    # Using 127.0.0.1 instead of localhost because of mysqlclient dialect.
+    "sqlalchemy_url": "mysql+mysqldb://root:password@127.0.0.1:3306/melty",
 }
 
 
@@ -51,7 +52,8 @@ class TestTargetMySQL(StandardTargetTests):  # type: ignore[misc, valid-type]
 def mysql_config():
     return {
         "dialect+driver": "mysql+mysqldb",
-        "host": "localhost",
+        # Using 127.0.0.1 instead of localhost because of mysqlclient dialect.
+        "host": "127.0.0.1",
         "user": "root",
         "password": "password",
         "database": "melty",
@@ -130,7 +132,8 @@ def test_port_default_config():
     """Test that the default config is passed into the engine when the config doesn't provide it."""
     config = {
         "dialect+driver": "mysql+mysqldb",
-        "host": "localhost",
+        # Using 127.0.0.1 instead of localhost because of mysqlclient dialect.
+        "host": "127.0.0.1",
         "user": "root",
         "password": "password",
         "database": "melty",
@@ -154,7 +157,8 @@ def test_port_config():
     """Test that the port config works."""
     config = {
         "dialect+driver": "mysql+mysqldb",
-        "host": "localhost",
+        # Using 127.0.0.1 instead of localhost because of mysqlclient dialect.
+        "host": "127.0.0.1",
         "user": "root",
         "password": "pasword",
         "database": "melty",
