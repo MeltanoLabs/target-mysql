@@ -11,6 +11,7 @@ from pendulum import now
 from singer_sdk.sinks import SQLSink
 from sqlalchemy import Column, MetaData, Table, insert, select, update
 from sqlalchemy.sql.expression import bindparam
+
 from target_mysql.connector import MySQLConnector
 
 if TYPE_CHECKING:
