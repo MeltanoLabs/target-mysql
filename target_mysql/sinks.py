@@ -1,9 +1,9 @@
 """MySQL target sink class, which handles writing streams."""
 
 from __future__ import annotations
-from decimal import Decimal
 
 import uuid
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Iterable
 
 import sqlalchemy
@@ -171,21 +171,33 @@ class MySQLSink(SQLSink):
                         # Necessary because Decimals aren't correctly serialized into
                         # into json when present in data_to_insert
                         # Is this the only place records might need sanitization?
-                        insert_record[column.name] = self.sanitize_entry(record.get(column.name))
+                        insert_record[column.name] = self.sanitize_entry(
+                            record.get(column.name),
+                        )
                         continue
                     insert_record[column.name] = record.get(column.name)
                 data_to_insert.append(insert_record)
         self.connector.connection.execute(insert, data_to_insert)
         return True
 
-    def sanitize_entry(self, to_convert: Any) -> dict | list | str:
-        if isinstance(to_convert, dict):
-            return {k: self.sanitize_entry(v) for (k,v) in to_convert.items()}
-        if isinstance(to_convert, list):
-            return [self.sanitize_entry(i) for i in to_convert]
-        if isinstance(to_convert, Decimal):
-            return str(to_convert)
-        return to_convert
+    def sanitize_entry(self, to_sanitize: Any) -> dict | list | str:  # noqa: ANN401
+        """Removes all Decimal objects and converts them to strings.
+
+        Allows json serialization to work correctly.
+
+        Args:
+            to_sanitize: An object to sanitize by removing Decimal objects.
+
+        Returns:
+            A sanitized version of the provided object, without Decimal objects.
+        """
+        if isinstance(to_sanitize, dict):
+            return {k: self.sanitize_entry(v) for (k, v) in to_sanitize.items()}
+        if isinstance(to_sanitize, list):
+            return [self.sanitize_entry(i) for i in to_sanitize]
+        if isinstance(to_sanitize, Decimal):
+            return str(to_sanitize)
+        return to_sanitize
 
     def upsert(
         self,

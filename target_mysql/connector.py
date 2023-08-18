@@ -156,9 +156,9 @@ class MySQLConnector(SQLConnector):
         json_type_array = []
 
         if jsonschema_type.get("type", False):
-            if type(jsonschema_type["type"]) is str:
+            if isinstance(jsonschema_type["type"], str):
                 json_type_array.append(jsonschema_type)
-            elif type(jsonschema_type["type"]) is list:
+            elif isinstance(jsonschema_type["type"], list):
                 for entry in jsonschema_type["type"]:
                     json_type_dict = {}
                     json_type_dict["type"] = entry
@@ -196,19 +196,20 @@ class MySQLConnector(SQLConnector):
         Returns:
             An instance of the appropriate SQL type class based on jsonschema_type.
         """
+        picked_type = None
         if "null" in jsonschema_type["type"]:
-            return None
-        if "integer" in jsonschema_type["type"]:
-            return BIGINT()
-        if "decimal" in jsonschema_type["type"]:
-            return BIGINT()
-        if "object" in jsonschema_type["type"]:
-            return JSON()
-        if "array" in jsonschema_type["type"]:
-            return JSON()
-        if jsonschema_type.get("format") == "date-time":
-            return TIMESTAMP()
-        return th.to_sql_type(jsonschema_type)
+            pass
+        elif (
+            "integer" in jsonschema_type["type"] or "decimal" in jsonschema_type["type"]
+        ):
+            picked_type = BIGINT()
+        elif "object" in jsonschema_type["type"] or "array" in jsonschema_type["type"]:
+            picked_type = JSON()
+        elif jsonschema_type.get("format") == "date-time":
+            picked_type = TIMESTAMP()
+        else:
+            picked_type = th.to_sql_type(jsonschema_type)
+        return picked_type
 
     @staticmethod
     def pick_best_sql_type(

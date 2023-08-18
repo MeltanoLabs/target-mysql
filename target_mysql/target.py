@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 import jsonschema
 from singer_sdk import typing as th
-from singer_sdk.target_base import Target
 from singer_sdk.exceptions import RecordsWithoutSchemaException
+from singer_sdk.target_base import Target
 
 from target_mysql.sinks import MySQLSink
 
