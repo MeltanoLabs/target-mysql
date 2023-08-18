@@ -7,16 +7,20 @@ import copy
 import io
 import typing as t
 from contextlib import redirect_stdout
+from decimal import Decimal
 from pathlib import Path
 
 import jsonschema
 import pytest
 import sqlalchemy
 from singer_sdk.testing import get_target_test_class, sync_end_to_end
-from target_mysql.connector import MySQLConnector
-from target_mysql.target import TargetMySQL
+from sqlalchemy.dialects.mysql import JSON
+from sqlalchemy.types import TIMESTAMP, VARCHAR
 from tests.samples.aapl.aapl import Fundamentals
 from tests.samples.sample_tap_countries.countries_tap import SampleTapCountries
+
+from target_mysql.connector import MySQLConnector
+from target_mysql.target import TargetMySQL
 
 SAMPLE_CONFIG: dict[str, t.Any] = {
     # Using 127.0.0.1 instead of localhost because of mysqlclient dialect.
@@ -69,9 +73,9 @@ def mysql_target(mysql_config) -> TargetMySQL:
     return TargetMySQL(config=mysql_config)
 
 
-def create_engine(target_postgres: TargetMySQL) -> sqlalchemy.engine.Engine:
+def create_engine(target_mysql: TargetMySQL) -> sqlalchemy.engine.Engine:
     return TargetMySQL.default_sink_class.connector_class(
-        config=target_postgres.config
+        config=target_mysql.config
     )._engine
 
 
@@ -409,8 +413,63 @@ def test_large_int(mysql_target):
     singer_file_to_target(file_name, mysql_target)
 
 
-# TODO: Reimplement test_anyof. See target-postgres tests for an example.
-# Originally removed because of MySQL issues with ARRAY datatype.
+def test_decimal_data(mysql_target):
+    "Test that decimals (number type in jsonschema) is handled correctly"
+    file_name = "decimal_data.singer"
+    singer_file_to_target(file_name, mysql_target)
+
+    engine = create_engine(mysql_target)
+    schema_name = mysql_target.config["default_target_schema"]
+
+    with engine.connect() as connection:
+        expected_decimal_data = [
+            {"id": 1, "amount": Decimal("4.0")},
+            {"id": 2, "amount": Decimal("5.6")},
+            {"id": 3, "amount": Decimal("-0.0000000007")},
+            {"id": 4, "amount": Decimal("812345678.9")},
+        ]
+
+        full_table_name = f"{schema_name}.test_decimal_data"
+        result = connection.execute(f"SELECT * FROM {full_table_name} ORDER BY id")
+        result_dict = [remove_metadata_columns(row._asdict()) for row in result.all()]
+        assert result_dict == expected_decimal_data
+
+
+def test_anyof(mysql_target):
+    """Test that anyOf is handled correctly"""
+    file_name = f"commits.singer"
+    singer_file_to_target(file_name, mysql_target)
+
+    engine = create_engine(mysql_target)
+    schema_name = mysql_target.config["default_target_schema"]
+    with engine.connect() as connection:
+        meta = sqlalchemy.MetaData(bind=connection)
+        table = sqlalchemy.Table("commits", meta, schema=schema_name, autoload=True)
+        for column in table.c:
+            # {"type":"string"}
+            if column.name == "id":
+                assert isinstance(column.type, VARCHAR)
+
+            # Any of nullable date-time.
+            # {"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]}
+            if column.name in {"authored_date", "committed_date"}:
+                assert isinstance(column.type, TIMESTAMP)
+
+            # Any of nullable array of strings or single string.
+            # {"anyOf":[{"type":"array","items":{"type":["null","string"]}},{"type":"string"},{"type":"null"}]}
+            if column.name == "parent_ids":
+                assert isinstance(column.type, JSON)
+
+            # Any of nullable string.
+            # {"anyOf":[{"type":"string"},{"type":"null"}]}
+            if column.name == "commit_message":
+                assert isinstance(column.type, VARCHAR)
+
+            # Any of nullable string or integer.
+            # {"anyOf":[{"type":"string"},{"type":"integer"},{"type":"null"}]}
+            if column.name == "legacy_id":
+                assert isinstance(column.type, VARCHAR)
+
 
 # TODO: Reimplement test_reserved_keywords. See target-postgres for an example.
 # Originally removed because the large number of columns were overflowing the MySQL

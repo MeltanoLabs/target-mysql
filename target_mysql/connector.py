@@ -199,10 +199,12 @@ class MySQLConnector(SQLConnector):
         picked_type = None
         if "null" in jsonschema_type["type"]:
             pass
-        elif (
-            "integer" in jsonschema_type["type"] or "decimal" in jsonschema_type["type"]
-        ):
+        elif "integer" in jsonschema_type["type"]:
             picked_type = BIGINT()
+        elif "number" in jsonschema_type["type"]:
+            # (65,30) is the maximum precision and scale.
+            # https://dev.mysql.com/doc/refman/8.0/en/precision-math-decimal-characteristics.html
+            picked_type = DECIMAL(65, 30)
         elif "object" in jsonschema_type["type"] or "array" in jsonschema_type["type"]:
             picked_type = JSON()
         elif jsonschema_type.get("format") == "date-time":

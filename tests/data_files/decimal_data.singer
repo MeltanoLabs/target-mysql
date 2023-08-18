@@ -1,0 +1,5 @@
+{"type": "SCHEMA", "stream": "test_decimal_data", "key_properties": ["id"], "schema": {"type": "object", "properties": {"id": {"type": "integer"}, "amount": {"type": "number"}}}}
+{"type": "RECORD", "stream": "test_decimal_data", "record": {"id": 1, "amount": 4.0}}
+{"type": "RECORD", "stream": "test_decimal_data", "record": {"id": 2, "amount": 5.6}}
+{"type": "RECORD", "stream": "test_decimal_data", "record": {"id": 3, "amount": -0.0000000007}}
+{"type": "RECORD", "stream": "test_decimal_data", "record": {"id": 4, "amount": 812345678.9}}
