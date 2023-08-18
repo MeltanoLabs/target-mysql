@@ -1,6 +1,7 @@
 """MySQL target sink class, which handles writing streams."""
 
 from __future__ import annotations
+from decimal import Decimal
 
 import uuid
 from typing import TYPE_CHECKING, Any, Iterable
@@ -166,10 +167,25 @@ class MySQLSink(SQLSink):
             for record in records:
                 insert_record = {}
                 for column in columns:
+                    if isinstance(record.get(column.name), (dict, list, Decimal)):
+                        # Necessary because Decimals aren't correctly serialized into
+                        # into json when present in data_to_insert
+                        # Is this the only place records might need sanitization?
+                        insert_record[column.name] = self.sanitize_entry(record.get(column.name))
+                        continue
                     insert_record[column.name] = record.get(column.name)
                 data_to_insert.append(insert_record)
         self.connector.connection.execute(insert, data_to_insert)
         return True
+
+    def sanitize_entry(self, to_convert: Any) -> dict | list | str:
+        if isinstance(to_convert, dict):
+            return {k: self.sanitize_entry(v) for (k,v) in to_convert.items()}
+        if isinstance(to_convert, list):
+            return [self.sanitize_entry(i) for i in to_convert]
+        if isinstance(to_convert, Decimal):
+            return str(to_convert)
+        return to_convert
 
     def upsert(
         self,
