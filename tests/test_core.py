@@ -13,7 +13,6 @@ import jsonschema
 import pytest
 import sqlalchemy
 from singer_sdk.testing import get_target_test_class, sync_end_to_end
-
 from target_mysql.connector import MySQLConnector
 from target_mysql.target import TargetMySQL
 from tests.samples.aapl.aapl import Fundamentals
