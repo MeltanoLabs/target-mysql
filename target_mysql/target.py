@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 import jsonschema
 from singer_sdk import typing as th
+from singer_sdk.exceptions import RecordsWithoutSchemaException
 from singer_sdk.target_base import Target
 
 from target_mysql.sinks import MySQLSink
@@ -106,7 +107,7 @@ class TargetMySQL(Target):
         th.Property(
             "dialect+driver",
             th.StringType,
-            default="mysql+pymysql",
+            default="mysql+mysqldb",
             description=(
                 "Dialect+driver see "
                 "https://docs.sqlalchemy.org/en/20/core/engines.html. "
@@ -175,7 +176,7 @@ class TargetMySQL(Target):
         stream_name = message_dict["stream"]
         if self.mapper.stream_maps.get(stream_name) is None:
             msg = f"Schema message has not been sent for {stream_name}"
-            raise RuntimeError(msg)
+            raise RecordsWithoutSchemaException(msg)
         try:
             super()._process_record_message(message_dict)
         except jsonschema.exceptions.ValidationError:

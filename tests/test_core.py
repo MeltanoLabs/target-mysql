@@ -7,21 +7,24 @@ import copy
 import io
 import typing as t
 from contextlib import redirect_stdout
+from decimal import Decimal
 from pathlib import Path
 
 import jsonschema
 import pytest
 import sqlalchemy
 from singer_sdk.testing import get_target_test_class, sync_end_to_end
-from sqlalchemy import create_engine
-
-from target_mysql.connector import MySQLConnector
-from target_mysql.target import TargetMySQL
+from sqlalchemy.dialects.mysql import JSON
+from sqlalchemy.types import TIMESTAMP, VARCHAR
 from tests.samples.aapl.aapl import Fundamentals
 from tests.samples.sample_tap_countries.countries_tap import SampleTapCountries
 
+from target_mysql.connector import MySQLConnector
+from target_mysql.target import TargetMySQL
+
 SAMPLE_CONFIG: dict[str, t.Any] = {
-    "sqlalchemy_url": "mysql+pymysql://root:password@localhost:3307/melty",
+    # Using 127.0.0.1 instead of localhost because of mysqlclient dialect.
+    "sqlalchemy_url": "mysql+mysqldb://root:password@127.0.0.1:3306/melty",
 }
 
 
@@ -51,12 +54,13 @@ class TestTargetMySQL(StandardTargetTests):  # type: ignore[misc, valid-type]
 @pytest.fixture(scope="session")
 def mysql_config():
     return {
-        "dialect+driver": "mysql+pymysql",
-        "host": "localhost",
+        "dialect+driver": "mysql+mysqldb",
+        # Using 127.0.0.1 instead of localhost because of mysqlclient dialect.
+        "host": "127.0.0.1",
         "user": "root",
         "password": "password",
         "database": "melty",
-        "port": 3307,
+        "port": 3306,
         "add_record_metadata": True,
         "hard_delete": False,
         "default_target_schema": "melty",
@@ -69,14 +73,18 @@ def mysql_target(mysql_config) -> TargetMySQL:
     return TargetMySQL(config=mysql_config)
 
 
-@pytest.fixture()
-def engine(mysql_config) -> sqlalchemy.engine.Engine:
-    return create_engine(
-        f"{(mysql_config)['dialect+driver']}://"
-        f"{(mysql_config)['user']}:{(mysql_config)['password']}@"
-        f"{(mysql_config)['host']}:{(mysql_config)['port']}/"
-        f"{(mysql_config)['database']}",
-    )
+def create_engine(target_mysql: TargetMySQL) -> sqlalchemy.engine.Engine:
+    return TargetMySQL.default_sink_class.connector_class(
+        config=target_mysql.config
+    )._engine
+
+
+def remove_metadata_columns(row: dict) -> dict:
+    new_row = {}
+    for column in row.keys():
+        if not column.startswith("_sdc"):
+            new_row[column] = row[column]
+    return new_row
 
 
 def singer_file_to_target(file_name, target) -> None:
@@ -116,7 +124,7 @@ def test_sqlalchemy_url_config(mysql_config):
     port = mysql_config["port"]
 
     config = {
-        "sqlalchemy_url": f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}",
+        "sqlalchemy_url": f"mysql+mysqldb://{user}:{password}@{host}:{port}/{database}",
     }
     tap = SampleTapCountries(config={}, state=None)
     target = TargetMySQL(config=config)
@@ -126,8 +134,9 @@ def test_sqlalchemy_url_config(mysql_config):
 def test_port_default_config():
     """Test that the default config is passed into the engine when the config doesn't provide it."""
     config = {
-        "dialect+driver": "mysql+pymysql",
-        "host": "localhost",
+        "dialect+driver": "mysql+mysqldb",
+        # Using 127.0.0.1 instead of localhost because of mysqlclient dialect.
+        "host": "127.0.0.1",
         "user": "root",
         "password": "password",
         "database": "melty",
@@ -143,19 +152,20 @@ def test_port_default_config():
     engine: sqlalchemy.engine.Engine = connector.create_sqlalchemy_engine()
     assert (
         str(engine.url)
-        == f"{dialect_driver}://{user}:{password}@{host}:3307/{database}"
+        == f"{dialect_driver}://{user}:{password}@{host}:3306/{database}"
     )
 
 
 def test_port_config():
     """Test that the port config works."""
     config = {
-        "dialect+driver": "mysql+pymysql",
-        "host": "localhost",
+        "dialect+driver": "mysql+mysqldb",
+        # Using 127.0.0.1 instead of localhost because of mysqlclient dialect.
+        "host": "127.0.0.1",
         "user": "root",
         "password": "pasword",
         "database": "melty",
-        "port": 3307,
+        "port": 3306,
     }
     dialect_driver = config["dialect+driver"]
     host = config["host"]
@@ -168,7 +178,7 @@ def test_port_config():
     engine: sqlalchemy.engine.Engine = connector.create_sqlalchemy_engine()
     assert (
         str(engine.url)
-        == f"{dialect_driver}://{user}:{password}@{host}:3307/{database}"
+        == f"{dialect_driver}://{user}:{password}@{host}:3306/{database}"
     )
 
 
@@ -208,7 +218,7 @@ def test_record_missing_key_property(mysql_target):
     with pytest.raises(Exception) as e:
         file_name = "record_missing_key_property.singer"
         singer_file_to_target(file_name, mysql_target)
-    assert "Primary key not found in record." in str(e.value)
+    assert "Record is missing one or more key_properties." in str(e.value)
 
 
 def test_record_missing_required_property(mysql_target):
@@ -251,19 +261,91 @@ def test_multiple_state_messages(mysql_target):
     singer_file_to_target(file_name, mysql_target)
 
 
-# TODO test that data is correct
 def test_relational_data(mysql_target):
+    engine = create_engine(mysql_target)
     file_name = "user_location_data.singer"
     singer_file_to_target(file_name, mysql_target)
 
     file_name = "user_location_upsert_data.singer"
     singer_file_to_target(file_name, mysql_target)
 
+    schema_name = mysql_target.config["default_target_schema"]
 
-def test_no_primary_keys(mysql_config, engine):
+    with engine.connect() as connection:
+        expected_test_users = [
+            {"id": 1, "name": "Johny"},
+            {"id": 2, "name": "George"},
+            {"id": 3, "name": "Jacob"},
+            {"id": 4, "name": "Josh"},
+            {"id": 5, "name": "Jim"},
+            {"id": 8, "name": "Thomas"},
+            {"id": 12, "name": "Paul"},
+            {"id": 13, "name": "Mary"},
+        ]
+
+        full_table_name = f"{schema_name}.test_users"
+        result = connection.execute(f"SELECT * FROM {full_table_name} ORDER BY id")
+        result_dict = [remove_metadata_columns(row._asdict()) for row in result.all()]
+        assert result_dict == expected_test_users
+
+        expected_test_locations = [
+            {"id": 1, "name": "Philly"},
+            {"id": 2, "name": "NY"},
+            {"id": 3, "name": "San Francisco"},
+            {"id": 6, "name": "Colorado"},
+            {"id": 8, "name": "Boston"},
+        ]
+
+        full_table_name = f"{schema_name}.test_locations"
+        result = connection.execute(f"SELECT * FROM {full_table_name} ORDER BY id")
+        result_dict = [remove_metadata_columns(row._asdict()) for row in result.all()]
+        assert result_dict == expected_test_locations
+
+        expected_test_user_in_location = [
+            {
+                "id": 1,
+                "user_id": 1,
+                "location_id": 4,
+                # These are returned as strings by the connection.execute() call below,
+                # despite being stored as JSON columns in the backend.
+                "info": '{"mood": "sad", "weather": "rainy"}',
+            },
+            {
+                "id": 2,
+                "user_id": 2,
+                "location_id": 3,
+                "info": '{"mood": "satisfied", "weather": "sunny"}',
+            },
+            {
+                "id": 3,
+                "user_id": 1,
+                "location_id": 3,
+                "info": '{"mood": "happy", "weather": "sunny"}',
+            },
+            {
+                "id": 6,
+                "user_id": 3,
+                "location_id": 2,
+                "info": '{"mood": "happy", "weather": "sunny"}',
+            },
+            {
+                "id": 14,
+                "user_id": 4,
+                "location_id": 1,
+                "info": '{"mood": "ok", "weather": "cloudy"}',
+            },
+        ]
+
+        full_table_name = f"{schema_name}.test_user_in_location"
+        result = connection.execute(f"SELECT * FROM {full_table_name} ORDER BY id")
+        result_dict = [remove_metadata_columns(row._asdict()) for row in result.all()]
+        assert result_dict == expected_test_user_in_location
+
+
+def test_no_primary_keys(mysql_target):
     """We run both of these tests twice just to ensure that no records are removed and append only works properly."""
+    engine = create_engine(mysql_target)
     table_name = "test_no_pk"
-    mysql_target = TargetMySQL(config=mysql_config)
     full_table_name = mysql_target.config["default_target_schema"] + "." + table_name
     with engine.connect() as connection:
         result = connection.execute(f"DROP TABLE IF EXISTS {full_table_name}")
@@ -331,8 +413,63 @@ def test_large_int(mysql_target):
     singer_file_to_target(file_name, mysql_target)
 
 
-# TODO: Reimplement test_anyof. See target-postgres tests for an example.
-# Originally removed because of MySQL issues with ARRAY datatype.
+def test_decimal_data(mysql_target):
+    "Test that decimals (number type in jsonschema) is handled correctly"
+    file_name = "decimal_data.singer"
+    singer_file_to_target(file_name, mysql_target)
+
+    engine = create_engine(mysql_target)
+    schema_name = mysql_target.config["default_target_schema"]
+
+    with engine.connect() as connection:
+        expected_decimal_data = [
+            {"id": 1, "amount": Decimal("4.0")},
+            {"id": 2, "amount": Decimal("5.6")},
+            {"id": 3, "amount": Decimal("-0.0000000007")},
+            {"id": 4, "amount": Decimal("812345678.9")},
+        ]
+
+        full_table_name = f"{schema_name}.test_decimal_data"
+        result = connection.execute(f"SELECT * FROM {full_table_name} ORDER BY id")
+        result_dict = [remove_metadata_columns(row._asdict()) for row in result.all()]
+        assert result_dict == expected_decimal_data
+
+
+def test_anyof(mysql_target):
+    """Test that anyOf is handled correctly"""
+    file_name = f"commits.singer"
+    singer_file_to_target(file_name, mysql_target)
+
+    engine = create_engine(mysql_target)
+    schema_name = mysql_target.config["default_target_schema"]
+    with engine.connect() as connection:
+        meta = sqlalchemy.MetaData(bind=connection)
+        table = sqlalchemy.Table("commits", meta, schema=schema_name, autoload=True)
+        for column in table.c:
+            # {"type":"string"}
+            if column.name == "id":
+                assert isinstance(column.type, VARCHAR)
+
+            # Any of nullable date-time.
+            # {"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]}
+            if column.name in {"authored_date", "committed_date"}:
+                assert isinstance(column.type, TIMESTAMP)
+
+            # Any of nullable array of strings or single string.
+            # {"anyOf":[{"type":"array","items":{"type":["null","string"]}},{"type":"string"},{"type":"null"}]}
+            if column.name == "parent_ids":
+                assert isinstance(column.type, JSON)
+
+            # Any of nullable string.
+            # {"anyOf":[{"type":"string"},{"type":"null"}]}
+            if column.name == "commit_message":
+                assert isinstance(column.type, VARCHAR)
+
+            # Any of nullable string or integer.
+            # {"anyOf":[{"type":"string"},{"type":"integer"},{"type":"null"}]}
+            if column.name == "legacy_id":
+                assert isinstance(column.type, VARCHAR)
+
 
 # TODO: Reimplement test_reserved_keywords. See target-postgres for an example.
 # Originally removed because the large number of columns were overflowing the MySQL
@@ -345,15 +482,16 @@ def test_new_array_column(mysql_target):
     singer_file_to_target(file_name, mysql_target)
 
 
-def test_activate_version_hard_delete(mysql_config, engine):
+def test_activate_version_hard_delete(mysql_config):
     """Activate Version Hard Delete Test."""
     table_name = "test_activate_version_hard"
     file_name = f"{table_name}.singer"
     full_table_name = mysql_config["default_target_schema"] + "." + table_name
     mysql_config_hard_delete_true = copy.deepcopy(mysql_config)
     mysql_config_hard_delete_true["hard_delete"] = True
-    pg_hard_delete_true = TargetMySQL(config=mysql_config_hard_delete_true)
-    singer_file_to_target(file_name, pg_hard_delete_true)
+    mysql_hard_delete_true = TargetMySQL(config=mysql_config_hard_delete_true)
+    engine = create_engine(mysql_hard_delete_true)
+    singer_file_to_target(file_name, mysql_hard_delete_true)
     with engine.connect() as connection:
         result = connection.execute(f"SELECT * FROM {full_table_name}")
         assert result.rowcount == 7
@@ -367,7 +505,7 @@ def test_activate_version_hard_delete(mysql_config, engine):
         result = connection.execute(f"SELECT * FROM {full_table_name}")
         assert result.rowcount == 9
 
-    singer_file_to_target(file_name, pg_hard_delete_true)
+    singer_file_to_target(file_name, mysql_hard_delete_true)
 
     # Should remove the 2 records we added manually
     with engine.connect() as connection:
@@ -375,14 +513,15 @@ def test_activate_version_hard_delete(mysql_config, engine):
         assert result.rowcount == 7
 
 
-def test_activate_version_soft_delete(mysql_config, engine):
+def test_activate_version_soft_delete(mysql_target):
     """Activate Version Soft Delete Test."""
+    engine = create_engine(mysql_target)
     table_name = "test_activate_version_soft"
     file_name = f"{table_name}.singer"
-    full_table_name = mysql_config["default_target_schema"] + "." + table_name
+    full_table_name = mysql_target.config["default_target_schema"] + "." + table_name
     with engine.connect() as connection:
         result = connection.execute(f"DROP TABLE IF EXISTS {full_table_name}")
-    mysql_config_soft_delete = copy.deepcopy(mysql_config)
+    mysql_config_soft_delete = copy.deepcopy(mysql_target._config)
     mysql_config_soft_delete["hard_delete"] = False
     pg_soft_delete = TargetMySQL(config=mysql_config_soft_delete)
     singer_file_to_target(file_name, pg_soft_delete)
@@ -413,15 +552,16 @@ def test_activate_version_soft_delete(mysql_config, engine):
         assert result.rowcount == 2
 
 
-def test_activate_version_deletes_data_properly(mysql_config, engine):
+def test_activate_version_deletes_data_properly(mysql_target):
     """Activate Version should."""
+    engine = create_engine(mysql_target)
     table_name = "test_activate_version_deletes_data_properly"
     file_name = f"{table_name}.singer"
-    full_table_name = mysql_config["default_target_schema"] + "." + table_name
+    full_table_name = mysql_target.config["default_target_schema"] + "." + table_name
     with engine.connect() as connection:
         result = connection.execute(f"DROP TABLE IF EXISTS {full_table_name}")
 
-    mysql_config_soft_delete = copy.deepcopy(mysql_config)
+    mysql_config_soft_delete = copy.deepcopy(mysql_target._config)
     mysql_config_soft_delete["hard_delete"] = True
     pg_hard_delete = TargetMySQL(config=mysql_config_soft_delete)
     singer_file_to_target(file_name, pg_hard_delete)

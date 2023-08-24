@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Iterable
 
 import sqlalchemy
@@ -166,10 +167,37 @@ class MySQLSink(SQLSink):
             for record in records:
                 insert_record = {}
                 for column in columns:
+                    if isinstance(record.get(column.name), (dict, list, Decimal)):
+                        # Necessary because Decimals aren't correctly serialized into
+                        # into json when present in data_to_insert
+                        # Is this the only place records might need sanitization?
+                        insert_record[column.name] = self.sanitize_entry(
+                            record.get(column.name),
+                        )
+                        continue
                     insert_record[column.name] = record.get(column.name)
                 data_to_insert.append(insert_record)
         self.connector.connection.execute(insert, data_to_insert)
         return True
+
+    def sanitize_entry(self, to_sanitize: Any) -> dict | list | str:  # noqa: ANN401
+        """Remove all Decimal objects and converts them to strings.
+
+        Allows json serialization to work correctly.
+
+        Args:
+            to_sanitize: An object to sanitize by removing Decimal objects.
+
+        Returns:
+            A sanitized version of the provided object, without Decimal objects.
+        """
+        if isinstance(to_sanitize, dict):
+            return {k: self.sanitize_entry(v) for (k, v) in to_sanitize.items()}
+        if isinstance(to_sanitize, list):
+            return [self.sanitize_entry(i) for i in to_sanitize]
+        if isinstance(to_sanitize, Decimal):
+            return str(to_sanitize)
+        return to_sanitize
 
     def upsert(
         self,
@@ -231,11 +259,9 @@ class MySQLSink(SQLSink):
             for column_name in self.schema["properties"]:
                 from_table_column: sqlalchemy.Column = from_table.columns[column_name]
                 to_table_column: sqlalchemy.Column = to_table.columns[column_name]
-                update_columns[from_table_column] = to_table_column
+                update_columns[to_table_column] = from_table_column
 
-            update_stmt = (
-                update(from_table).where(where_condition).values(update_columns)
-            )
+            update_stmt = update(to_table).where(where_condition).values(update_columns)
             self.connection.execute(update_stmt)
 
     def column_representation(

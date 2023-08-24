@@ -11,14 +11,6 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    services:
-      mysqldb:
-        image: mysql
-        env:
-          MYSQL_ROOT_PASSWORD: password
-          MYSQL_DATABASE: melty
-        ports:
-          - 3307:3306
     env:
       PIP_CONSTRAINT: .github/workflows/constraints.txt
     strategy:

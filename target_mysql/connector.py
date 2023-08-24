@@ -6,7 +6,7 @@ from typing import cast
 import sqlalchemy
 from singer_sdk import SQLConnector
 from singer_sdk import typing as th
-from sqlalchemy.dialects.mysql import BIGINT
+from sqlalchemy.dialects.mysql import BIGINT, JSON
 from sqlalchemy.engine import URL
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.types import (
@@ -156,9 +156,9 @@ class MySQLConnector(SQLConnector):
         json_type_array = []
 
         if jsonschema_type.get("type", False):
-            if type(jsonschema_type["type"]) is str:
+            if isinstance(jsonschema_type["type"], str):
                 json_type_array.append(jsonschema_type)
-            elif type(jsonschema_type["type"]) is list:
+            elif isinstance(jsonschema_type["type"], list):
                 for entry in jsonschema_type["type"]:
                     json_type_dict = {}
                     json_type_dict["type"] = entry
@@ -196,13 +196,22 @@ class MySQLConnector(SQLConnector):
         Returns:
             An instance of the appropriate SQL type class based on jsonschema_type.
         """
+        picked_type = None
         if "null" in jsonschema_type["type"]:
-            return None
-        if "integer" in jsonschema_type["type"]:
-            return BIGINT()
-        if jsonschema_type.get("format") == "date-time":
-            return TIMESTAMP()
-        return th.to_sql_type(jsonschema_type)
+            pass
+        elif "integer" in jsonschema_type["type"]:
+            picked_type = BIGINT()
+        elif "number" in jsonschema_type["type"]:
+            # (65,30) is the maximum precision and scale.
+            # https://dev.mysql.com/doc/refman/8.0/en/precision-math-decimal-characteristics.html
+            picked_type = DECIMAL(65, 30)
+        elif "object" in jsonschema_type["type"] or "array" in jsonschema_type["type"]:
+            picked_type = JSON()
+        elif jsonschema_type.get("format") == "date-time":
+            picked_type = TIMESTAMP()
+        else:
+            picked_type = th.to_sql_type(jsonschema_type)
+        return picked_type
 
     @staticmethod
     def pick_best_sql_type(
@@ -221,6 +230,7 @@ class MySQLConnector(SQLConnector):
             An instance of the best SQL type class based on defined precedence order.
         """
         precedence_order = [
+            JSON,
             VARCHAR,
             TIMESTAMP,
             DATETIME,
